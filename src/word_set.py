@@ -1,6 +1,6 @@
 from pyltp import Segmentor
 from pyltp import Postagger
-from src.config import *
+from src.config_local import *
 segmentor = Segmentor()  # 初始化实例
 segmentor.load(LTP_DATA_DIR + '/cws.model')  # 加载模型
 postagger = Postagger()
