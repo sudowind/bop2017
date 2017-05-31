@@ -1,2 +1,4 @@
 .DS_Store
+src/.idea/*
 .idea/*
+src/config_local.py
