@@ -36,8 +36,122 @@ class Parser:
         self.recognizer = NamedEntityRecognizer()  # 初始化实例
         self.recognizer.load(ner_model_path)  # 加载模型
 
+        q_words = {
+            'q1_person': ['谁', '那个', '哪个'],
+            'q1_time': ['那年', '时间', '哪年', '何时', '多久', '时候', '年'],
+            'q1_amount': ['多', '几', '多少', '第几'],
+            'q1_place': ['哪儿', '哪家', '哪里人', '哪里', '那家', '那里人', '那里'],
+            'q1_result': ['怎么', '为什么', '为何', '如何', '何'],
+            'q1_judge': ['是否', '还是', '吗'],
+            'q0_other': ['哪些', '那些', '干什么'],
+            'q0_definition': ['什么样', '什么', '怎么样', '怎样'],
+        }
+        self.question_words = []
+        self.word2key = {}
 
-def test():
+        for k, v in q_words.items():
+            self.question_words += v
+            for _v in v:
+                self.word2key[_v] = k
+
+        self.stop_words = set()
+        with open('../data/all-stop-word.txt') as f_stop:
+            for i in f_stop.readlines():
+                self.stop_words.add(i.strip())
+        self.articles = []
+
+    def cut_sentence(self, sent, stop=False):
+        """
+        句子分词
+        :param sent: 
+        :param stop: 
+        :return: 
+        """
+        if stop:
+            words = list(filter(lambda x: x not in self.stop_words, list(self.segmentor.segment(sent.strip()))))
+        else:
+            words = list(self.segmentor.segment(sent.strip()))
+        return words
+
+    def get_question_type(self, question):
+        """
+        获取问题类型
+        :param question: 
+        :return: 
+        """
+        q_type = ''
+        words = self.cut_sentence(question)
+        flag = False
+        for w in self.question_words:
+            if w in words:
+                flag = True
+                q_type = self.word2key[w]
+                break
+        if not flag:
+            # print(i, words)
+            q_type = 'other'
+        print(q_type)
+
+    def word_count(self, sentences):
+        """
+        篇章中的词频统计
+        :param sentences: 句子列表
+        :return: 
+        """
+        all_words = []
+        for i in sentences:
+            all_words += self.cut_sentence(i, True)
+        word_count = {}
+        for i in all_words:
+            if i in word_count:
+                word_count[i] += 1
+            else:
+                word_count[i] = 1
+        return word_count, sum(word_count.values())
+
+    def read_train_set(self, file_path):
+        """
+        读取测试文件
+        :param file_path: 文件路径
+        :return: 
+        """
+        with open(file_path) as f_in:
+            last_q = ''
+            article = {
+                'question': '',
+                'result': '',
+                'sentences': []
+            }
+            for i in f_in.readlines():
+                line = i.strip().split('\t')
+                if last_q == line[1]:
+                    article['sentences'].append(line[2])
+                    if int(line[0]) == 1:
+                        article['result'] = line[2]
+                else:
+                    self.articles.append(article)
+                    article = {'question': line[1], 'result': '', 'sentences': []}
+                last_q = line[1]
+            self.articles.append(article)
+        self.articles = self.articles[1:]
+        print(len(self.articles))
+        print(self.articles[0])
+
+    def tf_idf(self):
+        with open('../data/question_word.txt') as f_in:
+            pass
+
+    def analysis_question(self, index):
+        if len(self.articles) <= 0:
+            return
+        article = self.articles[index]
+        q_words = self.cut_sentence(article['question'], True)
+        print(q_words)
+        for word in q_words:
+            pass
+
+
+def test(sentence):
     os.environ['STANFORD_PARSER'] = STANFORD_PARSER_PATH
     os.environ['STANFORD_MODELS'] = STANFORD_MODELS_PATH
     os.environ['JAVAHOME'] = JAVA_HOME
@@ -68,25 +182,27 @@ def test():
     recognizer = NamedEntityRecognizer()  # 初始化实例
     recognizer.load(ner_model_path)  # 加载模型
 
-    sentence = '国立清水高级中学科学馆的外观是什么样的'
     words = segmentor.segment(sentence)
     postags = postagger.postag(words)
     netags = recognizer.recognize(words, postags)
     arcs = parser.parse(words, postags)  # 句法分析
 
-    print(list(words))
-    print(list(postags))
-    print(list(netags))
-    print("\t".join("%d:%s" % (arc.head, arc.relation) for arc in arcs))
+    res = zip(words, postags, netags, arcs)
+    for i in res:
+        print(','.join(i[:3]), str(i[3].head) + ':' + i[3].relation)
+    # print(list(words))
+    # print(list(postags))
+    # print(list(netags))
+    # print("\t".join("%d:%s" % (arc.head, arc.relation) for arc in arcs))
 
-    tree = s_parser.parse(words)
-    for i in tree:
-        print(i)
-
-    dependency_parser = stanford.StanfordDependencyParser(model_path=stanford_model_path)
-    res = list(dependency_parser.parse(words))
-    for row in res[0].triples():
-        print(row)
+    # tree = s_parser.parse(words)
+    # for i in tree:
+    #     print(i)
+    #
+    # dependency_parser = stanford.StanfordDependencyParser(model_path=stanford_model_path)
+    # res = list(dependency_parser.parse(words))
+    # for row in res[0].triples():
+    #     print(row)
 
 
 def get_all_questions():
@@ -105,19 +221,20 @@ def get_all_questions():
 def analysis_questions(parser):
 
     q_words = {
-        'q_person': ['谁', '那个', '哪个'],
-        'q_time': ['那年', '时间', '哪年', '何时', '多久', '时候', '年'],
-        'q_amount': ['多', '几', '多少', '第几'],
-        'q_place': ['哪儿', '哪家', '哪里人', '哪里', '那家', '那里人', '那里'],
-        'q_result': ['怎么', '为什么', '为何', '如何', '何'],
-        'q_judge': ['是否', '还是', '吗'],
-        'q_other': ['哪些', '那些', '干什么'],
-        'q_definition': ['什么样', '什么', '怎么样', '怎样'],
+        'q1_person': ['谁', '那个', '哪个'],
+        'q1_time': ['那年', '时间', '哪年', '何时', '多久', '时候', '年'],
+        'q1_amount': ['多', '几', '多少', '第几'],
+        'q1_place': ['哪儿', '哪家', '哪里人', '哪里', '那家', '那里人', '那里'],
+        'q1_result': ['怎么', '为什么', '为何', '如何', '何'],
+        'q1_judge': ['是否', '还是', '吗'],
+        'q0_other': ['哪些', '那些', '干什么'],
+        'q0_definition': ['什么样', '什么', '怎么样', '怎样'],
     }
     word2key = {}
     type2questions = {'other': []}
 
     question_words = []
+    print(q_words.items())
     for k, v in q_words.items():
         question_words += v
         for _v in v:
@@ -132,8 +249,8 @@ def analysis_questions(parser):
     for i in all_line:
         words = list(parser.segmentor.segment(i.strip()))
         flag = False
-        for w in words:
-            if w in question_words:
+        for w in question_words:
+            if w in words:
                 flag = True
                 q_type = word2key[w]
                 if q_type not in type2questions:
@@ -159,7 +276,10 @@ def analysis_questions(parser):
 
 
 if __name__ == '__main__':
-
+    # test('2006年7月27日，360安全卫士正式推出。')
     # get_all_questions()
     my_parser = Parser()
-    analysis_questions(my_parser)
+    # analysis_questions(my_parser)
+    # my_parser.get_question_type('缓刑适用于几年以下的有期徒刑')
+    my_parser.read_train_set('../data/BoP2017-DBQA.dev.txt')
+    my_parser.analysis_question(0)
