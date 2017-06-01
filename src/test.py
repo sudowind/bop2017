@@ -1,4 +1,6 @@
 import os
+import re
+import math
 from nltk.parse import stanford
 
 from src.config_local import *
@@ -141,15 +143,61 @@ class Parser:
         with open('../data/question_word.txt') as f_in:
             pass
 
-    def analysis_question(self, index):
+    def analysis_question(self, index, debug=True):
         if len(self.articles) <= 0:
             return
         article = self.articles[index]
         q_words = self.cut_sentence(article['question'], True)
-        print(q_words)
-        for word in q_words:
-            pass
+        true_result = ''.join(self.cut_sentence(article['result'], True))
+        if debug:
+            print('q', self.cut_sentence(article['question'], True))
+            print('q', article['question'])
 
+            print('a', self.cut_sentence(article['result'], True))
+            print('a', true_result)
+        # print(q_words)
+        # 候选答案句切词
+        l_words = [self.cut_sentence(line, True) for line in article['sentences']]
+        # 计算关键词idf
+        idf = {}
+        for word in q_words:
+            count = 0
+            for line in l_words:
+                if word in line:
+                    count += 1
+            idf[word] = count
+        idf = {k: math.log(len(l_words) * 1.0/(v + 1)) if len(l_words) > 0 else 0 for k, v in idf.items()}
+        # print(idf)
+
+        line2score = {}
+        for line in l_words:
+            score = 0
+            for word in q_words:
+                # 计算关键词tf
+                tf = 0
+                delta = 1
+                if len(re.findall('\d+', word)) > 0:
+                    delta = 3
+                for i in line:
+                    if i == word:
+                        tf += 1
+                if len(line) == 0:
+                    tf = 0
+                else:
+                    tf = (tf * 1.0 * delta) / len(line)
+                score += tf * idf[word]
+            line2score[''.join(line)] = score
+        res = sorted(line2score.items(), key=lambda x: x[1], reverse=True)
+        if debug:
+            for i in res:
+                print(i[1], i[0])
+        if len(res) > 0:
+            for i in range(len(res)):
+                if res[i][0] == true_result:
+                    return i + 1
+            return 0
+        else:
+            return 0
 
 def test(sentence):
     os.environ['STANFORD_PARSER'] = STANFORD_PARSER_PATH
@@ -281,5 +329,16 @@ if __name__ == '__main__':
     my_parser = Parser()
     # analysis_questions(my_parser)
     # my_parser.get_question_type('缓刑适用于几年以下的有期徒刑')
-    my_parser.read_train_set('../data/BoP2017-DBQA.dev.txt')
-    my_parser.analysis_question(0)
+    my_parser.read_train_set('../data/BoP2017-DBQA.train.txt')
+    count = 0
+    for i in range(len(my_parser.articles)):
+        res = my_parser.analysis_question(i, debug=False)
+    # for i in range(10):
+    #     res = my_parser.analysis_question(i, debug=True)
+        if res == 0:
+            count += 0
+        else:
+            count += 1.0 / res
+    print('score', count/len(my_parser.articles))
+
+    # my_parser.analysis_question(0)
